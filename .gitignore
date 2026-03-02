@@ -4,5 +4,7 @@
 .vscode/tasks.json
 *.code-workspace
 
+build
+
 ### SourcePawn ###
 *.smx

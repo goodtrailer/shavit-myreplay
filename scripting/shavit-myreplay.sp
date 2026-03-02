@@ -48,10 +48,10 @@ Cookie gC_AutoWatchCookie = null;
 public Plugin myinfo =
 {
     name        = "shavit - Personal Replays",
-    author      = "BoomShot",
+    author      = "BoomShot, updated by goodtrailer",
     description = "Allows a user to watch their replay after finishing the map.",
     version     = "1.0.4",
-    url         = "https://github.com/BoomShotKapow/shavit-myreplay"
+    url         = "https://github.com/goodtrailer/shavit-myreplay"
 };
 
 public APLRes AskPluginLoad2(Handle myself, bool late, char[] error, int err_max)
@@ -249,8 +249,8 @@ public void Shavit_OnStyleConfigLoaded(int styles)
 
 public Action Shavit_OnFinishPre(int client, timer_snapshot_t snapshot)
 {
-    //Prevent menu from displaying when it's a new WR or if using autosave
-    if(!gB_ShowMenu[client] || Shavit_GetRankForTime(snapshot.bsStyle, snapshot.fCurrentTime, snapshot.iTimerTrack) == 1 || gB_AutoSave[client])
+    //Prevent menu from displaying if using autosave
+    if(!gB_ShowMenu[client] || gB_AutoSave[client])
     {
         return Plugin_Continue;
     }
@@ -272,7 +272,7 @@ public Action Shavit_OnFinishPre(int client, timer_snapshot_t snapshot)
     gM_ReplayMenu[client].AddItem("no", "No");
     gM_ReplayMenu[client].AddItem("save", "Save for later.");
     gM_ReplayMenu[client].AddItem("", "", ITEMDRAW_SPACER);
-    gM_ReplayMenu[client].AddItem("stop", "Stop asking, please.");
+    gM_ReplayMenu[client].AddItem("stop", "Stop asking, please (autosave).");
     gM_ReplayMenu[client].Display(client, 20);
 
     return Plugin_Continue;
@@ -298,7 +298,7 @@ public Action Timer_MenuDelay(Handle timer, any data)
 
 public Action Shavit_ShouldSaveReplayCopy(int client, int style, float time, int jumps, int strafes, float sync, int track, float oldtime, float perfs, float avgvel, float maxvel, int timestamp, bool isbestreplay, bool istoolong)
 {
-    if(!gB_ReplayRecorder || isbestreplay || istoolong || !gB_ShowMenu[client])
+    if(!gB_ReplayRecorder || istoolong || !gB_ShowMenu[client])
     {
         if(!gB_ShowMenu[client])
         {
@@ -323,29 +323,8 @@ public void Shavit_OnReplaySaved(int client, int style, float time, int jumps, i
 
     PrintDebug("Shavit_OnReplaySaved: %N || time: %f || isbestreplay: %b || iscopy: %b", client, time, isbestreplay, iscopy);
 
-    if(!gB_ReplayRecorder || istoolong || (!isbestreplay && !iscopy) || !gB_ShowMenu[client])
+    if(!gB_ReplayRecorder || istoolong || !iscopy || !gB_ShowMenu[client])
     {
-        return;
-    }
-    else if(isbestreplay)
-    {
-        //Set the player's personal replay to their best replay if they don't have one
-        //Or auto save the better replay
-        if(!replay.GetHeader(header) || (gB_AutoSave[client] && header.fTime > time && header.iStyle == style && header.iTrack == track))
-        {
-            PrintDebug("Copying file: [%s] to [%s]", replaypath, path);
-
-            if(CopyReplayFile(replaypath, path))
-            {
-                SavePersonalReplay(client);
-
-                if(gB_AutoWatch[client])
-                {
-                    StartPersonalReplay(client, replay.sAuth);
-                }
-            }
-        }
-
         return;
     }
 
@@ -391,46 +370,6 @@ public void Shavit_OnReplaySaved(int client, int style, float time, int jumps, i
             gM_ReplayMenu[client].Display(client, 20);
         }
     }
-}
-
-bool CopyReplayFile(const char[] from, const char[] to)
-{
-    File original = OpenFile(from, "rb");
-
-    if(original == null)
-    {
-        LogError("[MyReplay] Failed to read replay file: [%s]!", from);
-        return false;
-    }
-
-    File copy = OpenFile(to, "wb+");
-
-    if(copy == null)
-    {
-        delete original;
-
-        LogError("[MyReplay] Failed to write replay file: [%s]!", to);
-        return false;
-    }
-
-    if(!original.Seek(0, SEEK_SET))
-    {
-        return false;
-    }
-
-    int buffer[256];
-
-    while(!original.EndOfFile())
-    {
-        int read = original.Read(buffer, sizeof(buffer), 4);
-
-        copy.Write(buffer, read, 4);
-    }
-
-    delete original;
-    delete copy;
-
-    return true;
 }
 
 void SavePersonalReplay(int client)
@@ -479,15 +418,18 @@ public int PersonalReplay_MenuHandler(Menu menu, MenuAction action, int param1, 
             char info[16];
             if(menu.GetItem(param2, info, sizeof(info)))
             {
-                if(StrEqual(info, "yes") || StrEqual(info, "save"))
+                if(StrEqual(info, "yes") || StrEqual(info, "save") || StrEqual(info, "stop"))
                 {
+                    if(StrEqual(info, "stop"))
+                    {
+                        gB_AutoSave[param1] = true;
+                        gC_AutoSaveCookie.Set(param1, gB_AutoSave[param1] ? "1" : "0");
+                    }
+
                     //Change temporary file name to permanent
                     if(RenameFile(replayPath, tempPath))
                     {
-                        char option[8];
-                        option = StrEqual(info, "yes") ? "Yes" : "Save";
-
-                        PrintDebug("[%s] Renaming file: [%s] to [%s]", option, tempPath, replayPath);
+                        PrintDebug("[%s] Renaming file: [%s] to [%s]", info, tempPath, replayPath);
 
                         SavePersonalReplay(param1);
 
@@ -497,19 +439,11 @@ public int PersonalReplay_MenuHandler(Menu menu, MenuAction action, int param1, 
                         }
                     }
                 }
-                else if(StrEqual(info, "no") || StrEqual(info, "stop"))
+                else if(StrEqual(info, "no"))
                 {
-                    char option[8];
-                    option = StrEqual(info, "no") ? "No" : "Stop";
-
-                    if(StrEqual(info, "stop"))
-                    {
-                        gB_ShowMenu[param1] = false;
-                    }
-
                     if(DeleteFile(tempPath))
                     {
-                        PrintDebug("[%s]: Deleting file: [%s]", option, tempPath);
+                        PrintDebug("[%s]: Deleting file: [%s]", info, tempPath);
                     }
                 }
             }
