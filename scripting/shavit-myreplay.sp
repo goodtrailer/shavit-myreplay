@@ -418,14 +418,20 @@ public int PersonalReplay_MenuHandler(Menu menu, MenuAction action, int param1, 
             char info[16];
             if(menu.GetItem(param2, info, sizeof(info)))
             {
-                if(StrEqual(info, "yes") || StrEqual(info, "save") || StrEqual(info, "stop"))
+                bool autosaveTriggered = false;
+                if(StrEqual(info, "stop"))
                 {
-                    if(StrEqual(info, "stop"))
-                    {
-                        gB_AutoSave[param1] = true;
-                        gC_AutoSaveCookie.Set(param1, gB_AutoSave[param1] ? "1" : "0");
-                    }
+                    gB_AutoSave[param1] = true;
+                    gC_AutoSaveCookie.Set(param1, gB_AutoSave[param1] ? "1" : "0");
 
+                    replay_header_t header;
+                    replay_header_t tempHeader;
+                    replay.GetHeader(tempHeader, true);
+                    autosaveTriggered = !replay.GetHeader(header) || (header.fTime > tempHeader.fTime && header.iStyle == tempHeader.iStyle && header.iTrack == tempHeader.iTrack);
+                }
+
+                if(StrEqual(info, "yes") || StrEqual(info, "save") || autosaveTriggered)
+                {
                     //Change temporary file name to permanent
                     if(RenameFile(replayPath, tempPath))
                     {
@@ -439,7 +445,7 @@ public int PersonalReplay_MenuHandler(Menu menu, MenuAction action, int param1, 
                         }
                     }
                 }
-                else if(StrEqual(info, "no"))
+                else if(StrEqual(info, "no") || !autosaveTriggered)
                 {
                     if(DeleteFile(tempPath))
                     {

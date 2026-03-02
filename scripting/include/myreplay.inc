@@ -50,10 +50,10 @@ enum struct PersonalReplay
         }
     }
 
-    bool GetHeader(replay_header_t header)
+    bool GetHeader(replay_header_t header, bool temp = false)
     {
         char replayPath[PLATFORM_MAX_PATH];
-        this.GetPath(replayPath, sizeof(replayPath));
+        this.GetPath(replayPath, sizeof(replayPath), temp);
 
         File file = ReadReplayHeader(replayPath, header);
 
